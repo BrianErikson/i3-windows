@@ -11,6 +11,8 @@ include_directories(
 )
 link_directories(${I3IPCpp_LIBRARY_DIRS})
 
+find_package(X11 REQUIRED)
+
 option(BUILD_TESTS "Build the tests" ON)
 if(BUILD_TESTS)
     enable_testing()
@@ -28,6 +30,7 @@ add_library(i3w
 
 target_link_libraries(i3w
   ${I3IPCpp_LIBRARIES}
+  X11
 )
 
 add_executable(i3-windows
