@@ -8,7 +8,6 @@
 struct WindowContent {
   const pid_t pid;
   const std::string exe_path;
-  const i3ipc::ContainerLayout layout;
   const std::list<WindowContent> children;
   const std::shared_ptr<i3ipc::container_t> i3node;
 };

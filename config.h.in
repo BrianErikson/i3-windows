@@ -1,0 +1,4 @@
+#pragma once
+
+#cmakedefine PROJECT_VERSION "@PROJECT_VERSION@"
+#cmakedefine PROJECT_DESCRIPTION "@PROJECT_DESCRIPTION@"

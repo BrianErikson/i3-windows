@@ -1,10 +1,10 @@
 #include <gtest/gtest.h>
 #include <WindowManager.h>
 
-TEST(unittests, init)
-{
+TEST(unittests, init) {
   WindowManager wm;
   wm.print_tree();
+  wm.save_current_layout("./layout.json");
 }
 
 int main(int argc, char **argv) {

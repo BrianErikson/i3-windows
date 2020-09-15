@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.0)
 project(i3-windows
   VERSION 0.1.0
+  DESCRIPTION "Save and restore i3 windows"
 )
 set(CMAKE_CXX_STANDARD 17)
 
@@ -35,6 +36,10 @@ target_link_libraries(i3w
   jsoncpp
 )
 
+target_include_directories(i3w
+  PUBLIC ${CMAKE_BINARY_DIR}
+)
+
 add_executable(i3-windows
   src/main.cc
 )
@@ -42,3 +47,5 @@ add_executable(i3-windows
 target_link_libraries(i3-windows
   i3w
 )
+
+configure_file(config.h.in config.h)
