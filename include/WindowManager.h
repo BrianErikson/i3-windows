@@ -6,6 +6,7 @@
 
 struct WindowContent {
   const pid_t pid;
+  const std::string exe_path;
   const std::list<WindowContent> children;
   const std::shared_ptr<i3ipc::container_t> i3node;
 };
@@ -19,12 +20,12 @@ class WindowManager {
  public:
   void print_tree();
  private:
+  static std::string get_path(pid_t pid);
 
   std::vector<DisplayContent> get_display_contents();
   void print_nodes(const std::shared_ptr<i3ipc::container_t>& root, int cur_depth);
   WindowContent get_window(const std::shared_ptr<i3ipc::container_t>& container);
   pid_t get_pid(const std::shared_ptr<i3ipc::container_t>& container);
-
 
   _XDisplay *x_display{nullptr};
   Screen *x_screen{nullptr};

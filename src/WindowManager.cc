@@ -1,7 +1,11 @@
 #include <iostream>
 #include <i3ipc++/ipc.hpp>
 #include <WindowManager.h>
-#include <assert.h>
+#include <cassert>
+#include <cstring>
+#include <sstream>
+#include <climits>
+#include <unistd.h>
 
 std::string layout_to_string(i3ipc::ContainerLayout layout) {
   switch (layout) {
@@ -22,7 +26,6 @@ void WindowManager::print_tree() {
     std::cout << "Display: " << display_container.display_name << std::endl;
 
     for (const auto &window : display_container.windows) {
-      std::cout << window.pid << std::endl;
       print_nodes(window.i3node, 1);
     }
   }
@@ -76,19 +79,18 @@ pid_t WindowManager::get_pid(const std::shared_ptr<i3ipc::container_t> &containe
     assert(this->x_display);
     this->x_screen = XDefaultScreenOfDisplay(this->x_display);
     assert(this->x_screen);
-    this->x_pid_atom = XInternAtom(this->x_display, "__NET_WM_PID", true);
+    this->x_pid_atom = XInternAtom(this->x_display, "_NET_WM_PID", true);
     assert(this->x_pid_atom);
   }
-
   Atom actual_type;
   int actual_format;
-  unsigned long nitems, bytes_after, nbytes;
+  unsigned long nitems, bytes_after;
   unsigned char *prop;
   if (XGetWindowProperty(this->x_display,
                          container->xwindow_id,
                          this->x_pid_atom,
                          0,
-                         sizeof(pid_t),
+                         32,
                          false,
                          AnyPropertyType,
                          &actual_type,
@@ -101,8 +103,11 @@ pid_t WindowManager::get_pid(const std::shared_ptr<i3ipc::container_t> &containe
   if (!actual_format) {
     return 0;
   }
+  assert(actual_format == 32);
 
-  return static_cast<pid_t>(atoi(reinterpret_cast<char *>(prop)));
+  long pid;
+  memcpy(&pid, reinterpret_cast<char *>(prop), sizeof(long));
+  return static_cast<pid_t>(pid);
 }
 
 WindowContent WindowManager::get_window(const std::shared_ptr<i3ipc::container_t> &container) {
@@ -112,5 +117,20 @@ WindowContent WindowManager::get_window(const std::shared_ptr<i3ipc::container_t
     children.emplace_back(this->get_window(node));
   }
 
-  return {this->get_pid(container), children, container};
+  pid_t pid = this->get_pid(container);
+  return {pid, get_path(pid), children, container};
+}
+
+std::string WindowManager::get_path(pid_t pid) {
+  std::ostringstream ss;
+  ss << "/proc/" << pid << "/exe";
+
+  char path[PATH_MAX+1];
+  ssize_t count = readlink(ss.str().c_str(), path, PATH_MAX);
+  if (count <= 0) {
+    return "";
+  }
+
+  path[count] = '\0';
+  return path;
 }
