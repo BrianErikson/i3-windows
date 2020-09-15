@@ -6,6 +6,7 @@
 #include <sstream>
 #include <climits>
 #include <unistd.h>
+#include <fstream>
 
 std::string layout_to_string(i3ipc::ContainerLayout layout) {
   switch (layout) {
@@ -28,6 +29,50 @@ void WindowManager::print_tree() {
     for (const auto &window : display_container.windows) {
       print_nodes(window.i3node, 1);
     }
+  }
+}
+
+Json::Value WindowManager::to_json(const WindowContent &window) {
+  Json::Value json_children{Json::ValueType::arrayValue};
+  for (const auto &child : window.children) {
+    json_children.append(this->to_json(child));
+  }
+
+  Json::Value json_window{Json::ValueType::objectValue};
+  json_window["children"] = json_children;
+  json_window["executable"] = window.exe_path;
+  json_window["layout"] = layout_to_string(window.layout);
+  json_window["pid"] = window.pid;
+  json_window["wm_class"] = window.i3node->window_properties.xclass;
+
+  return json_window;
+}
+
+void WindowManager::save_current_layout(const std::string &path) {
+  Json::Value root{Json::ValueType::arrayValue};
+
+  auto displays = this->get_display_contents();
+  for (const auto &display : displays) {
+    Json::Value json_array{Json::ValueType::arrayValue};
+    for (const auto &window : display.windows) {
+      json_array.append(this->to_json(window));
+    }
+
+    Json::Value json_display{Json::ValueType::objectValue};
+    json_display["display"] = display.display_name;
+    json_display["windows"] = json_array;
+  }
+
+  Json::StyledWriter writer;
+  auto json_str = writer.write(root);
+  std::cout << json_str << std::endl;
+
+  {
+    std::ofstream file{path, std::ios_base::out | std::ios_base::trunc};
+    // TODO: handle failure modes
+    assert(file.is_open());
+    file << json_str;
+    file.close();
   }
 }
 
@@ -118,7 +163,7 @@ WindowContent WindowManager::get_window(const std::shared_ptr<i3ipc::container_t
   }
 
   pid_t pid = this->get_pid(container);
-  return {pid, get_path(pid), children, container};
+  return {pid, get_path(pid), container->layout, children, container};
 }
 
 std::string WindowManager::get_path(pid_t pid) {

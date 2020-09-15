@@ -12,6 +12,7 @@ include_directories(
 link_directories(${I3IPCpp_LIBRARY_DIRS})
 
 find_package(X11 REQUIRED)
+find_package(jsoncpp REQUIRED)
 
 option(BUILD_TESTS "Build the tests" ON)
 if(BUILD_TESTS)
@@ -31,6 +32,7 @@ add_library(i3w
 target_link_libraries(i3w
   ${I3IPCpp_LIBRARIES}
   X11
+  jsoncpp
 )
 
 add_executable(i3-windows
