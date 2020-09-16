@@ -21,6 +21,7 @@ class WindowManager {
  public:
   void print_tree();
   void save_current_layout(const std::string &path);
+  void load_layout(const std::string& basic_string);
 
  private:
   static std::string get_path(pid_t pid);

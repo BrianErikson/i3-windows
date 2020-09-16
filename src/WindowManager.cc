@@ -181,3 +181,7 @@ std::string WindowManager::get_path(pid_t pid) {
   path[count] = '\0';
   return path;
 }
+
+void WindowManager::load_layout(const std::string& basic_string) {
+  // TODO
+}
