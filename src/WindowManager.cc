@@ -7,6 +7,8 @@
 #include <climits>
 #include <unistd.h>
 #include <fstream>
+#include <utils.h>
+#include <stdio.h>
 
 std::string layout_to_string(i3ipc::ContainerLayout layout) {
   switch (layout) {
@@ -20,6 +22,16 @@ std::string layout_to_string(i3ipc::ContainerLayout layout) {
   }
 
   return "";
+}
+
+WindowManager::~WindowManager() {
+  if (this->x_display) {
+    XFree(this->x_display);
+  }
+
+  if (this->x_screen) {
+    XFree(this->x_screen);
+  }
 }
 
 void WindowManager::print_tree() {
@@ -119,14 +131,10 @@ pid_t WindowManager::get_pid(const std::shared_ptr<i3ipc::container_t> &containe
     return 0;
   }
 
-  if (!this->x_display) {
-    this->x_display = XOpenDisplay(nullptr);
-    assert(this->x_display);
-    this->x_screen = XDefaultScreenOfDisplay(this->x_display);
-    assert(this->x_screen);
-    this->x_pid_atom = XInternAtom(this->x_display, "_NET_WM_PID", true);
-    assert(this->x_pid_atom);
+  if (!this->x11_connect()) {
+    return false;
   }
+
   Atom actual_type;
   int actual_format;
   unsigned long nitems, bytes_after;
@@ -172,7 +180,7 @@ std::string WindowManager::get_path(pid_t pid) {
   std::ostringstream ss;
   ss << "/proc/" << pid << "/exe";
 
-  char path[PATH_MAX+1];
+  char path[PATH_MAX + 1];
   ssize_t count = readlink(ss.str().c_str(), path, PATH_MAX);
   if (count <= 0) {
     return "";
@@ -182,6 +190,175 @@ std::string WindowManager::get_path(pid_t pid) {
   return path;
 }
 
-void WindowManager::load_layout(const std::string& basic_string) {
-  // TODO
+bool WindowManager::load_display_content(const Json::Value &value) {
+  if (!value.isObject()) {
+    std::cerr << "Expected object in json entry: " << std::endl << value.toStyledString()
+              << std::endl;
+    return false;
+  }
+
+  /*
+  json_window["executable"] = window.exe_path;
+  json_window["layout"] = layout_to_string(window.i3node->layout);
+  json_window["pid"] = window.pid;
+  json_window["wm_class"] = window.i3node->window_properties.xclass;
+   */
+
+  const auto exec_value = value["executable"];
+  if (exec_value.empty() || !exec_value.isString()) {
+    std::cerr << "Invalid executable member field in object:" << std::endl << value.toStyledString()
+              << std::endl;
+    return false;
+  }
+
+  const std::string exec_path{exec_value.asString()};
+  if (!utils::file_exists(exec_path)) {
+    std::cerr << "Could not find executable " << exec_path << " from object " << std::endl
+              << value.toStyledString() << std::endl;
+    return false;
+  }
+
+  // TODO: start process
+  // TODO: wait for process to idle (maybe start other processes in parallel?)
+  // TODO: Move identified i3 window attached to process to the location specified by json
+}
+
+bool WindowManager::load_display(const Json::Value &value) {
+  if (!value.isObject()) {
+    std::cerr << "Expected object in json entry: " << std::endl << value.toStyledString()
+              << std::endl;
+    return false;
+  }
+
+  const auto display_value = value["display"];
+  if (display_value.empty() || !display_value.isString()) {
+    std::cerr << "Invalid display member field in object:" << std::endl << value.toStyledString()
+              << std::endl;
+    return false;
+  }
+
+  if (!this->x11_connect()) {
+    return false;
+  }
+
+  const auto xrandr_display_name = display_value.asString();
+  if (!this->xrandr_display_connected(xrandr_display_name)) {
+    return false;
+  }
+
+  const auto windows_value = value["windows"];
+  if (windows_value.empty() || !windows_value.isArray()) {
+    std::cerr << "Invalid windows member field in object:" << std::endl << value.toStyledString()
+              << std::endl;
+    return false;
+  }
+  for (const auto &window_value : windows_value) {
+    if (!this->load_display_content(window_value)) {
+      std::cerr << "Could not load window value " << std::endl << window_value.toStyledString()
+        << std::endl;
+    }
+  }
+
+  return true;
+}
+
+bool WindowManager::load_layout(const std::string &load_path) {
+  // TODO: better error reporting
+  Json::Value root;
+  {
+    std::ifstream file{load_path};
+    if (!utils::file_exists(load_path)) {
+      std::cout << "File " << load_path << " does not exist!" << std::endl;
+      return false;
+    }
+
+    if (!file.is_open()) {
+      std::cout << "Unable to open file " << load_path << std::endl;
+      return false;
+    }
+
+    std::stringstream buf;
+    buf << file.rdbuf();
+
+    Json::Reader reader;
+    if (!reader.parse(buf, root, false)) {
+      std::cerr << "Unable to parse file " << load_path << std::endl;
+      return false;
+    }
+  }
+
+  if (!root.isArray()) {
+    std::cerr << "root of json structure is not of type array" << std::endl;
+    return false;
+  }
+
+  for (const auto &display : root) {
+    this->load_display(display);
+  }
+  // this->conn.send_command("[workspace=\" 1 \"] move workspace to output eDP-1");
+}
+
+bool WindowManager::x11_connect() {
+  if (!this->x_display) {
+    this->x_display = XOpenDisplay(nullptr);
+    if (!this->x_display) {
+      std::cerr << "Could not connect to default DISPLAY" << std::endl;
+      return false;
+    }
+
+    this->x_screen = XDefaultScreenOfDisplay(this->x_display);
+    if (!this->x_screen) {
+      std::cerr << "Could not connect to default screen of DISPLAY" << std::endl;
+      return false;
+    }
+
+    this->x_pid_atom = XInternAtom(this->x_display, "_NET_WM_PID", true);
+    if (!this->x_pid_atom) {
+      std::cerr << "_NET_WM_PID attribute unavailable. What kind of X11 display is running??"
+                << std::endl;
+      return false;
+    }
+  }
+
+  return true;
+}
+
+_XRROutputInfo *WindowManager::get_output_info(const std::string &xrandr_display_name) {
+  _XRROutputInfo *out{nullptr};
+
+  const auto screen_res = XRRGetScreenResources(this->x_display, this->x_screen->root);
+  for (int i = 0; i < screen_res->ncrtc; i++) {
+    const auto crtc_info = XRRGetCrtcInfo(this->x_display, screen_res, screen_res->crtcs[i]);
+    for (int j = 0; j < crtc_info->noutput; j++) {
+      const auto output_info = XRRGetOutputInfo(this->x_display, screen_res,
+                                                crtc_info->outputs[j]);
+      std::string output_name{output_info->name, static_cast<unsigned long>(output_info->nameLen)};
+      if (xrandr_display_name == output_name) {
+        out = output_info;
+        break;
+      }
+
+      XRRFreeOutputInfo(output_info);
+    }
+
+    XRRFreeCrtcInfo(crtc_info);
+    if (out) {
+      break;
+    }
+  }
+  XRRFreeScreenResources(screen_res);
+
+  return out;
+}
+
+bool WindowManager::xrandr_display_connected(const std::string &xrandr_display_name) {
+  const auto output = this->get_output_info(xrandr_display_name);
+  if (!output) {
+    std::cerr << "Could not find connected output XRandR display " << xrandr_display_name
+              << std::endl;
+    return false;
+  }
+
+  XRRFreeOutputInfo(output);
+  return true;
 }

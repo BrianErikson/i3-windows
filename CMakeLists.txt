@@ -24,6 +24,7 @@ endif()
 
 set(SRCS
   src/WindowManager.cc
+  src/utils.cc
 )
 
 add_library(i3w

@@ -5,6 +5,7 @@
 #include <config.h>
 #include <WindowManager.h>
 #include <sys/stat.h>
+#include "utils.h"
 
 const char *argp_program_version = "i3-windows " PROJECT_VERSION;
 const char *argp_program_bug_address = "briankerikson@gmail.com";
@@ -45,10 +46,6 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state) {
 
 static struct argp argp = {options, parse_opt, args_doc, doc, nullptr, nullptr, nullptr};
 
-bool file_exists(const std::string &path) {
-  struct stat buffer{};
-  return stat(path.c_str(), &buffer) == 0;
-}
 
 int main(int argc, char **argv) {
   if (!argc) {
@@ -71,7 +68,7 @@ int main(int argc, char **argv) {
   std::string save_path = arguments[static_cast<int>(Arguments::SAVE)].path;
   std::string load_path = arguments[static_cast<int>(Arguments::SAVE)].path;
 
-  if (load_enabled && !file_exists(load_path)) {
+  if (load_enabled && !utils::file_exists(load_path)) {
     std::cout << "Unable to open file: " << load_path << std::endl;
     return 1;
   }
