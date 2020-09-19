@@ -14,6 +14,8 @@ link_directories(${I3IPCpp_LIBRARY_DIRS})
 
 find_package(X11 REQUIRED)
 find_package(jsoncpp REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(XRANDR REQUIRED IMPORTED_TARGET xrandr)
 
 option(BUILD_TESTS "Build the tests" ON)
 if(BUILD_TESTS)
@@ -25,6 +27,7 @@ endif()
 set(SRCS
   src/WindowManager.cc
   src/utils.cc
+  src/i3WindowListener.cc
 )
 
 add_library(i3w
@@ -35,6 +38,7 @@ target_link_libraries(i3w
   ${I3IPCpp_LIBRARIES}
   X11
   jsoncpp
+  PkgConfig::XRANDR
 )
 
 target_include_directories(i3w

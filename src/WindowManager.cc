@@ -24,6 +24,29 @@ std::string layout_to_string(i3ipc::ContainerLayout layout) {
   return "";
 }
 
+i3ipc::ContainerLayout layout_from_string(const std::string &str) {
+  if (str == "SPLIT_H") {
+    return i3ipc::ContainerLayout::SPLIT_H;
+  }
+  if (str == "SPLIT_V") {
+    return i3ipc::ContainerLayout::SPLIT_V;
+  }
+  if (str == "STACKED") {
+    return i3ipc::ContainerLayout::STACKED;
+  }
+  if (str == "TABBED") {
+    return i3ipc::ContainerLayout::TABBED;
+  }
+  if (str == "DOCKAREA") {
+    return i3ipc::ContainerLayout::DOCKAREA;
+  }
+  if (str == "OUTPUT") {
+    return i3ipc::ContainerLayout::OUTPUT;
+  }
+
+  return i3ipc::ContainerLayout::UNKNOWN;
+}
+
 WindowManager::~WindowManager() {
   if (this->x_display) {
     XFree(this->x_display);
@@ -53,6 +76,7 @@ Json::Value WindowManager::to_json(const WindowContent &window) {
   Json::Value json_window{Json::ValueType::objectValue};
   json_window["children"] = json_children;
   json_window["executable"] = window.exe_path;
+  json_window["args"] = "";
   json_window["layout"] = layout_to_string(window.i3node->layout);
   json_window["pid"] = window.pid;
   json_window["wm_class"] = window.i3node->window_properties.xclass;
@@ -190,22 +214,47 @@ std::string WindowManager::get_path(pid_t pid) {
   return path;
 }
 
-bool WindowManager::load_display_content(const Json::Value &value) {
-  if (!value.isObject()) {
-    std::cerr << "Expected object in json entry: " << std::endl << value.toStyledString()
+bool WindowManager::load_window_layout(const Json::Value &value) {
+  if (value["layout"].empty()) {
+    std::cerr << "Cannot load an empty window layout for object:" << value.toStyledString()
               << std::endl;
     return false;
   }
+  if (!value["executable"].empty()) {
+    std::cerr << "Expected a window layout but found executable in object:"
+              << value.toStyledString() << std::endl;
+    return false;
+  }
+  if (value["children"].empty()) {
+    std::cerr << "Window object must either contain children or an executable path. Object:"
+              << std::endl << value.toStyledString() << std::endl;
+    return false;
+  }
 
-  /*
-  json_window["executable"] = window.exe_path;
-  json_window["layout"] = layout_to_string(window.i3node->layout);
-  json_window["pid"] = window.pid;
-  json_window["wm_class"] = window.i3node->window_properties.xclass;
-   */
+  // TODO: pass "value" as container to children for appropriate layout generation
+
+  for (const auto &child : value["children"]) {
+    if (!this->load_window(child, value)) {
+      std::cerr << "Could not load window object:" << value.toStyledString() << std::endl;
+    }
+  }
+
+  return true;
+}
+
+bool WindowManager::load_window(const Json::Value &value, const Json::Value &parent) {
+  if (parent.empty()) {
+    // TODO: Does a window always have a parent layout?
+    return false;
+  }
 
   const auto exec_value = value["executable"];
-  if (exec_value.empty() || !exec_value.isString()) {
+  if (exec_value.empty()) {
+    std::cerr << "Expected an executable value for object:" << std::endl << value.toStyledString()
+              << std::endl;
+    return false;
+  }
+  else if (!exec_value.isString()) {
     std::cerr << "Invalid executable member field in object:" << std::endl << value.toStyledString()
               << std::endl;
     return false;
@@ -218,9 +267,55 @@ bool WindowManager::load_display_content(const Json::Value &value) {
     return false;
   }
 
-  // TODO: start process
+  std::string args{""};
+  if (value["args"].isString()) {
+    args = value["args"].asString();
+  }
+
+  this->window_listener.set_event_callback([](const i3ipc::workspace_event_t &ev) {
+    // ensure this is thread-safe
+    std::cout << "workspace_event: " << (char)ev.type << std::endl;
+  });
+
+  if (!this->conn.send_command("exec --no-startup-id " + exec_path + " " + args)) {
+    return false;
+  }
+
   // TODO: wait for process to idle (maybe start other processes in parallel?)
   // TODO: Move identified i3 window attached to process to the location specified by json
+
+
+  return true;
+}
+
+bool WindowManager::load_display_content(const Json::Value &value) {
+  if (!value.isObject()) {
+    std::cerr << "Expected object in json entry: " << std::endl << value.toStyledString()
+              << std::endl;
+    return false;
+  }
+  if (value["layout"].isInt() && static_cast<i3ipc::ContainerLayout>(value["layout"].asInt())
+      == i3ipc::ContainerLayout::OUTPUT) {
+    std::cerr << "Nested displays are not supported. Object:" << std::endl << value.toStyledString()
+             << std::endl;
+    return false;
+  }
+
+  /*
+  json_window["executable"] = window.exe_path;
+  json_window["args"] = "";
+  json_window["layout"] = layout_to_string(window.i3node->layout);
+  json_window["pid"] = window.pid;
+  json_window["wm_class"] = window.i3node->window_properties.xclass;
+   */
+
+  if (!this->load_window_layout(value)) {
+    if (!this->load_window(value, Json::Value{})) {
+      std::cerr << "Unidentified object:" << std::endl << value.toStyledString() << std::endl;
+      return false;
+    }
+  }
+
 }
 
 bool WindowManager::load_display(const Json::Value &value) {
@@ -263,6 +358,11 @@ bool WindowManager::load_display(const Json::Value &value) {
 }
 
 bool WindowManager::load_layout(const std::string &load_path) {
+  if (!this->window_listener.connect()) {
+    std::cerr << "Unable to connect to i3 dbus daemon" << std::endl;
+    return false;
+  }
+
   // TODO: better error reporting
   Json::Value root;
   {
@@ -295,7 +395,6 @@ bool WindowManager::load_layout(const std::string &load_path) {
   for (const auto &display : root) {
     this->load_display(display);
   }
-  // this->conn.send_command("[workspace=\" 1 \"] move workspace to output eDP-1");
 }
 
 bool WindowManager::x11_connect() {

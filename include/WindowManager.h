@@ -5,6 +5,7 @@
 #include <X11/Xlib.h>
 #include <X11/extensions/Xrandr.h>
 #include <jsoncpp/json/json.h>
+#include "i3WindowListener.h"
 
 struct WindowContent {
   const pid_t pid;
@@ -35,13 +36,15 @@ class WindowManager {
   Json::Value to_json(const WindowContent &window);
   bool load_display(const Json::Value &value);
   bool load_display_content(const Json::Value &value);
-  bool load_window(const Json::Value &value);
+  bool load_window(const Json::Value &value, const Json::Value &parent);
+  bool load_window_layout(const Json::Value &value);
   bool x11_connect();
   bool xrandr_display_connected(const std::string& xrandr_display_name);
 
   // Ownership of returned ptr goes to caller
   _XRROutputInfo* get_output_info(const std::string &xrandr_display_name);
 
+  i3WindowListener window_listener{};
   _XDisplay *x_display{nullptr};
   Screen *x_screen{nullptr};
   Atom x_pid_atom{0};
