@@ -9,7 +9,7 @@ i3WindowListener::~i3WindowListener() {
   }
 }
 
-void i3WindowListener::set_event_callback(const std::function<void(const i3ipc::workspace_event_t &)>& callback) {
+void i3WindowListener::set_event_callback(const std::function<void(const i3ipc::window_event_t&)>& callback) {
   std::lock_guard<std::mutex> lock{this->conn_mut};
   this->conn.signal_window_event.connect(callback);
 }

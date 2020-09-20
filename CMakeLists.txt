@@ -28,7 +28,7 @@ set(SRCS
   src/WindowManager.cc
   src/utils.cc
   src/i3WindowListener.cc
-)
+  src/I3Container.cc include/I3Container.h)
 
 add_library(i3w
   ${SRCS}

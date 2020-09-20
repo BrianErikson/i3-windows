@@ -9,7 +9,7 @@ class i3WindowListener {
   bool connect();
 
   // callback will be executed in a separate thread. Ensure proper thread safety in callback.
-  void set_event_callback(const std::function<void(const i3ipc::workspace_event_t&)>& callback);
+  void set_event_callback(const std::function<void(const i3ipc::window_event_t&)>& callback);
 
  private:
   void run(std::promise<bool> state_promise);
